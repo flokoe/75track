@@ -14,6 +14,7 @@ interface ChallengeState {
   abandonChallenge: (id: string) => void;
 
   toggleTask: (date: string, taskId: string) => void;
+  setTaskValue: (date: string, taskId: string, value: number | string) => void;
   getDayLog: (date: string) => DayLog | undefined;
 
   // Computed
@@ -21,6 +22,7 @@ interface ChallengeState {
   getCurrentDay: () => number;
   getStreak: () => number;
   isTaskCompleted: (date: string, taskId: string) => boolean;
+  getTaskValue: (date: string, taskId: string) => number | string | undefined;
   isDayComplete: (date: string) => boolean;
 }
 
@@ -96,6 +98,50 @@ export const useChallengeStore = create<ChallengeState>()(
         }
       },
 
+      setTaskValue: (date, taskId, value) => {
+        const { activeChallengeId, dayLogs } = get();
+        const challenge = get().getActiveChallenge();
+        if (!activeChallengeId || !challenge) return;
+
+        // Find the task definition to check if target is met
+        const taskDef = challenge.tasks.find((t) => t.id === taskId);
+        const isComplete = taskDef?.target
+          ? typeof value === 'number' && value >= taskDef.target
+          : typeof value === 'number' ? value > 0 : Boolean(value);
+
+        const existingLog = dayLogs.find(
+          (log) => log.challengeId === activeChallengeId && log.date === date
+        );
+
+        if (existingLog) {
+          const existingTask = existingLog.tasks.find((t) => t.taskId === taskId);
+          const updatedTasks: TaskCompletion[] = existingTask
+            ? existingLog.tasks.map((t) =>
+                t.taskId === taskId
+                  ? { ...t, value, completed: isComplete, completedAt: isComplete ? new Date().toISOString() : undefined }
+                  : t
+              )
+            : [...existingLog.tasks, { taskId, value, completed: isComplete, completedAt: isComplete ? new Date().toISOString() : undefined }];
+
+          set((state) => ({
+            dayLogs: state.dayLogs.map((log) =>
+              log.challengeId === activeChallengeId && log.date === date
+                ? { ...log, tasks: updatedTasks }
+                : log
+            ),
+          }));
+        } else {
+          const newLog: DayLog = {
+            challengeId: activeChallengeId,
+            date,
+            tasks: [{ taskId, value, completed: isComplete, completedAt: isComplete ? new Date().toISOString() : undefined }],
+          };
+          set((state) => ({
+            dayLogs: [...state.dayLogs, newLog],
+          }));
+        }
+      },
+
       getDayLog: (date) => {
         const { activeChallengeId, dayLogs } = get();
         if (!activeChallengeId) return undefined;
@@ -147,6 +193,11 @@ export const useChallengeStore = create<ChallengeState>()(
       isTaskCompleted: (date, taskId) => {
         const log = get().getDayLog(date);
         return log?.tasks.find((t) => t.taskId === taskId)?.completed ?? false;
+      },
+
+      getTaskValue: (date, taskId) => {
+        const log = get().getDayLog(date);
+        return log?.tasks.find((t) => t.taskId === taskId)?.value;
       },
 
       isDayComplete: (date) => {

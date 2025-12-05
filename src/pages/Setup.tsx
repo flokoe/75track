@@ -2,7 +2,14 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useChallengeStore } from '../stores/challengeStore';
 import { TEMPLATES, createEmptyTemplate } from '../utils/templates';
-import type { ChallengeTemplate, TaskDefinition } from '../types';
+import type { ChallengeTemplate, TaskDefinition, TaskType } from '../types';
+
+const TASK_TYPE_INFO: Record<TaskType, { label: string; description: string; icon: string }> = {
+  boolean: { label: 'Checkbox', description: 'Simple yes/no', icon: '☑️' },
+  counter: { label: 'Counter', description: 'Track a count (e.g., glasses of water)', icon: '🔢' },
+  duration: { label: 'Duration', description: 'Track minutes (e.g., workout time)', icon: '⏱️' },
+  text: { label: 'Notes', description: 'Write a reflection', icon: '📝' },
+};
 
 export function Setup() {
   const navigate = useNavigate();
@@ -15,7 +22,12 @@ export function Setup() {
       ? { name: activeChallenge.name, duration: activeChallenge.duration, strictMode: activeChallenge.strictMode, tasks: activeChallenge.tasks }
       : TEMPLATES['75hard']
   );
+
+  // New task form state
   const [newTaskName, setNewTaskName] = useState('');
+  const [newTaskType, setNewTaskType] = useState<TaskType>('boolean');
+  const [newTaskTarget, setNewTaskTarget] = useState<number>(1);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   const handleSelectTemplate = (key: string) => {
     if (key === 'custom') {
@@ -28,16 +40,25 @@ export function Setup() {
 
   const handleAddTask = () => {
     if (!newTaskName.trim()) return;
+
     const newTask: TaskDefinition = {
       id: crypto.randomUUID(),
       name: newTaskName.trim(),
-      icon: '✓',
+      type: newTaskType,
+      target: newTaskType === 'counter' || newTaskType === 'duration' ? newTaskTarget : undefined,
+      icon: TASK_TYPE_INFO[newTaskType].icon,
     };
+
     setTemplate({
       ...template,
       tasks: [...template.tasks, newTask],
     });
+
+    // Reset form
     setNewTaskName('');
+    setNewTaskType('boolean');
+    setNewTaskTarget(1);
+    setShowAddForm(false);
   };
 
   const handleRemoveTask = (taskId: string) => {
@@ -51,6 +72,13 @@ export function Setup() {
     if (template.tasks.length === 0) return;
     createChallenge(template);
     navigate('/');
+  };
+
+  const getTaskTypeLabel = (task: TaskDefinition) => {
+    const type = task.type || 'boolean';
+    if (type === 'counter' && task.target) return `${task.target}x`;
+    if (type === 'duration' && task.target) return `${task.target} min`;
+    return TASK_TYPE_INFO[type].label;
   };
 
   if (step === 'select') {
@@ -164,13 +192,16 @@ export function Setup() {
                 key={task.id}
                 className="flex items-center justify-between bg-white p-3 rounded-xl border border-gray-200"
               >
-                <span className="flex items-center gap-2">
-                  <span>{task.icon}</span>
-                  <span className="text-gray-700">{task.name}</span>
-                </span>
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-lg">{task.icon}</span>
+                  <span className="text-gray-700 truncate">{task.name}</span>
+                  <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full flex-shrink-0">
+                    {getTaskTypeLabel(task)}
+                  </span>
+                </div>
                 <button
                   onClick={() => handleRemoveTask(task.id)}
-                  className="text-red-500 hover:text-red-700 p-1"
+                  className="text-red-500 hover:text-red-700 p-1 flex-shrink-0"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -180,22 +211,83 @@ export function Setup() {
             ))}
           </div>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newTaskName}
-              onChange={(e) => setNewTaskName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-              placeholder="Add a task..."
-              className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none"
-            />
+          {/* Add Task Form */}
+          {showAddForm ? (
+            <div className="bg-white p-4 rounded-xl border-2 border-blue-200 space-y-3">
+              <input
+                type="text"
+                value={newTaskName}
+                onChange={(e) => setNewTaskName(e.target.value)}
+                placeholder="Task name..."
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                autoFocus
+              />
+
+              {/* Task Type Selection */}
+              <div className="grid grid-cols-2 gap-2">
+                {(Object.keys(TASK_TYPE_INFO) as TaskType[]).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setNewTaskType(type)}
+                    className={`p-2 rounded-lg border-2 text-left transition-colors ${
+                      newTaskType === type
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>{TASK_TYPE_INFO[type].icon}</span>
+                      <span className="font-medium text-sm">{TASK_TYPE_INFO[type].label}</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">{TASK_TYPE_INFO[type].description}</p>
+                  </button>
+                ))}
+              </div>
+
+              {/* Target input for counter/duration */}
+              {(newTaskType === 'counter' || newTaskType === 'duration') && (
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    {newTaskType === 'counter' ? 'Target count' : 'Target minutes'}
+                  </label>
+                  <input
+                    type="number"
+                    value={newTaskTarget}
+                    onChange={(e) => setNewTaskTarget(parseInt(e.target.value) || 1)}
+                    min={1}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowAddForm(false)}
+                  className="flex-1 py-2 text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddTask}
+                  disabled={!newTaskName.trim()}
+                  className={`flex-1 py-2 rounded-lg font-medium ${
+                    newTaskName.trim()
+                      ? 'bg-blue-500 text-white hover:bg-blue-600'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  Add Task
+                </button>
+              </div>
+            </div>
+          ) : (
             <button
-              onClick={handleAddTask}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors"
+              onClick={() => setShowAddForm(true)}
+              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-colors"
             >
-              Add
+              + Add Task
             </button>
-          </div>
+          )}
         </div>
 
         {/* Start Button */}
