@@ -7,11 +7,14 @@ export function Today() {
   const challenge = useChallengeStore((s) => s.getActiveChallenge());
   const currentDay = useChallengeStore((s) => s.getCurrentDay());
   const streak = useChallengeStore((s) => s.getStreak());
-  const getDayLog = useChallengeStore((s) => s.getDayLog);
+  const dayLogs = useChallengeStore((s) => s.dayLogs);
+  const activeChallengeId = useChallengeStore((s) => s.activeChallengeId);
 
   const today = getToday();
-  const log = getDayLog(today);
-  const completedCount = log?.tasks.filter((t) => t.completed).length ?? 0;
+  const todayLog = dayLogs.find(
+    (log) => log.challengeId === activeChallengeId && log.date === today
+  );
+  const completedCount = todayLog?.tasks.filter((t) => t.completed).length ?? 0;
   const totalTasks = challenge?.tasks.length ?? 0;
   const allComplete = totalTasks > 0 && completedCount === totalTasks;
 
